@@ -1,10 +1,13 @@
 #include "display-mapping.h"
 #include<iostream>
+#include<sys/ioctl.h>
+#include <unistd.h>
 #include<string.h>
+#include<curses.h>
 
 DisplayMapping::DisplayMapping()
 {
-
+    GetScreenSize(&screen_size);
 }
 
 bool DisplayMapping::InsertBeaconItem(uint64_t integer_mac, BEACON_DETAIL* data)
@@ -51,6 +54,8 @@ bool DisplayMapping::InsertProbeItem(uint64_t integer_mac, PROBE_DETAIL* data)
 
         iter = probe_detail_.find(integer_mac); // get_key
         /* Update data */
+        memcpy(iter->second->probe, data->probe, sizeof(data->probe));
+        memcpy(iter->second->bssid, data->bssid, sizeof(data->bssid));
         iter->second->power = data->power;
         iter->second->frame += 1;
 
@@ -62,11 +67,12 @@ void DisplayMapping::ShowItem()
     std::map<uint64_t, BEACON_DETAIL*>::iterator beacon_iter;
     std::map<uint64_t, PROBE_DETAIL*>::iterator probe_iter;
 
+    printf("\033[%d;1H", 1);
     printf("BSSID\t\t\tESSID\t\tCHAN\tBEACON\tPOWER\tCRYPT\n");
     for(beacon_iter = beacon_detail_.begin(); beacon_iter != beacon_detail_.end(); ++beacon_iter)
     {
         printf("%02X:%02X:%02X:%02X:%02X:%02X\t", beacon_iter->second->bssid[0], beacon_iter->second->bssid[1], beacon_iter->second->bssid[2], beacon_iter->second->bssid[3], beacon_iter->second->bssid[4], beacon_iter->second->bssid[5]);
-        printf("%s\t%d\t%d\t%d\t%d\n", beacon_iter->second->essid, beacon_iter->second->channel, beacon_iter->second->hit_beacon, beacon_iter->second->power, beacon_iter->second->crypt);
+        printf("% -15s\t%d\t%d\t%d\t%d\n", beacon_iter->second->essid, beacon_iter->second->channel, beacon_iter->second->hit_beacon, beacon_iter->second->power, beacon_iter->second->crypt);
     }
     printf("\n");
     printf("BSSID\t\t\tSTATION\t\t\tPWR\tFRAME\tPROBE\n");
@@ -76,7 +82,7 @@ void DisplayMapping::ShowItem()
         printf("%02X:%02X:%02X:%02X:%02X:%02X\t", probe_iter->second->station_id[0], probe_iter->second->station_id[1], probe_iter->second->station_id[2], probe_iter->second->station_id[3], probe_iter->second->station_id[4], probe_iter->second->station_id[5]);
         printf("%d\t%d\t%s\n", probe_iter->second->power, probe_iter->second->frame, probe_iter->second->probe);
     }
-    printf("\n\n\n\n\n\n\n");
+    //printf("\033[6n");
     printf("\033[2J");
 }
 
@@ -93,4 +99,13 @@ void DisplayMapping::FreeItem()
     {
         free(probe_iter->second);
     }
+}
+
+void DisplayMapping::GetScreenSize(std::pair<uint16_t, uint16_t>* xy_pair)
+{
+    struct winsize temp_w;
+
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &temp_w);
+    xy_pair->first = temp_w.ws_row; // x
+    xy_pair->second = temp_w.ws_col; // y
 }

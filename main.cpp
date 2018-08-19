@@ -7,8 +7,8 @@
 #include "display-mapping.h"
 
 #define MAX_PACKET_SIZE 0xFFFF
-#define PROMISCUOUS 1
-#define TIME_OUT 0xFF
+#define PROMISCUOUS     1
+#define TIME_OUT        0xFF
 
 using namespace std;
 
@@ -22,17 +22,20 @@ void CopyProbeDetail(PROBE_DETAIL* probe_temp,
 
 int main(int argc, char** argv)
 {
+    /* Setting pcap */
     pcap_t* pkt_descriptor;
     pcap_pkthdr* pkt_header;
     const unsigned char* pkt_buffer;
     char* interface_name = argv[1];
     char err_buf[256];
+    /* 802.11 frame */
     RADIOTAP_HDR* radio_header;
     IETRIPLE_HDR* ieee_header;
     IETRIPLE_BODY* ieee_body;
     TAG_SSID* tag_ssid;
     BEACON_DETAIL temp_beacon_item;
     PROBE_DETAIL temp_probe_item;
+    /* Display class */
     DisplayMapping display;
 
     if(argc != 2)
@@ -72,7 +75,6 @@ int main(int argc, char** argv)
                 case BEACON:
                     CopyBeaconDetail(&temp_beacon_item, ieee_header->address3, (char*)&(ieee_body->tag_length)+1,
                                       radio_header->antenna_signal1, radio_header->channel_frequency, ieee_body->cpb_info.privacy);
-
                     display.InsertBeaconItem(MacToIntegerKey(ieee_header->address3), &temp_beacon_item);
                     break;
                 default:
@@ -88,10 +90,10 @@ void CopyBeaconDetail(BEACON_DETAIL* beacon_temp, uint8_t* bssid_addr, char* ess
                       int8_t power, uint16_t frequency, bool crypt)
 {
     memset(beacon_temp->essid, 0, sizeof(beacon_temp->essid)); // clear essid
-    memcpy(beacon_temp->bssid, bssid_addr, 6); // copy bssid, because bssid will be convert integer
+    memcpy(beacon_temp->bssid, bssid_addr, 6); // copy bssid, because bssid will be converting integer
     beacon_temp->power = power;
     beacon_temp->channel = (uint8_t)((frequency - 2412)/5) + 1;    // Todo: Now setting middle frequency, Add Low and High
-    beacon_temp->hit_beacon = 0;
+    beacon_temp->hit_beacon = 0; // beacon will be counting
     beacon_temp->crypt = crypt; // 0 - Open, 1 - Crypt
     strncpy(beacon_temp->essid, (char*)(essid_addr), (uint8_t)(*(essid_addr-1))); // essid_addr => length
 }
