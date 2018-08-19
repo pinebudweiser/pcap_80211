@@ -1,7 +1,6 @@
 #include <iostream>
 #include <stdint.h>
 #include <map>
-#include <vector>
 #include <pcap/pcap.h>
 #include <string.h>
 #include "802-wireless.h"
@@ -14,8 +13,12 @@
 using namespace std;
 
 uint64_t MacToIntegerKey(uint8_t* byte_mac);
-void CopyDisplayStruct(DISPLAY_ITEM* temp, uint8_t* bssid_addr, char* essid_addr,
-                       int8_t power, uint16_t frequency);
+void CopyBeaconDetail(BEACON_DETAIL* beacon_temp,
+                      uint8_t* bssid_addr, char* essid_addr,
+                      int8_t power, uint16_t frequency, bool crypt);
+void CopyProbeDetail(PROBE_DETAIL* probe_temp,
+                     uint8_t* bssid_addr, uint8_t* station_addr, char* probe_addr,
+                     int8_t power);
 
 int main(int argc, char** argv)
 {
@@ -27,7 +30,9 @@ int main(int argc, char** argv)
     RADIOTAP_HDR* radio_header;
     IETRIPLE_HDR* ieee_header;
     IETRIPLE_BODY* ieee_body;
-    DISPLAY_ITEM temp_display_item;
+    TAG_SSID* tag_ssid;
+    BEACON_DETAIL temp_beacon_item;
+    PROBE_DETAIL temp_probe_item;
     DisplayMapping display;
 
     if(argc != 2)
@@ -53,34 +58,52 @@ int main(int argc, char** argv)
         radio_header = (RADIOTAP_HDR*)(pkt_buffer);
         ieee_header = (IETRIPLE_HDR*)(pkt_buffer + radio_header->length);
         ieee_body = (IETRIPLE_BODY*)(pkt_buffer + radio_header->length + sizeof(IETRIPLE_HDR));
+        tag_ssid = (TAG_SSID*)ieee_body;
 
         if(ieee_header->frame_type.type == MANAGEMENT_FRAME)
         {
             switch(ieee_header->frame_type.sub_type)
             {
+                case PROBE_REQUEST:
+                    CopyProbeDetail(&temp_probe_item, ieee_header->address3, ieee_header->address2, (char*)&(tag_ssid->tag_length)+1,
+                                radio_header->antenna_signal1);
+                    display.InsertProbeItem(MacToIntegerKey(ieee_header->address2), &temp_probe_item);
+                    break;
                 case BEACON:
-                    CopyDisplayStruct(&temp_display_item, ieee_header->bss_id, (char*)&(ieee_body->tag_length)+1,
-                                      radio_header->antenna_signal1,
-                                      radio_header->channel_frequency);
-                    display.InsertItem(MacToIntegerKey(ieee_header->bss_id), &temp_display_item);
-                    display.ShowItem();
+                    CopyBeaconDetail(&temp_beacon_item, ieee_header->address3, (char*)&(ieee_body->tag_length)+1,
+                                      radio_header->antenna_signal1, radio_header->channel_frequency, ieee_body->cpb_info.privacy);
+
+                    display.InsertBeaconItem(MacToIntegerKey(ieee_header->address3), &temp_beacon_item);
                     break;
                 default:
-                    continue;
+                    break;
             }
+            display.ShowItem();
         }
     }
     return 0;
 }
 
-void CopyDisplayStruct(DISPLAY_ITEM* temp, uint8_t* bssid_addr, char* essid_addr,
-                       int8_t power, uint16_t frequency)
+void CopyBeaconDetail(BEACON_DETAIL* beacon_temp, uint8_t* bssid_addr, char* essid_addr,
+                      int8_t power, uint16_t frequency, bool crypt)
 {
-    memcpy(temp->bssid, bssid_addr, 6);
-    temp->power = power;
-    temp->channel = (uint8_t)((frequency - 2412)/5) + 1;    // Todo: Now Middle frequency, add Low, High using enum
-    temp->hit_beacon = 0;
-    strncpy(temp->essid, (char*)(essid_addr), (uint8_t)(*(essid_addr-1))); // essid_addr = length
+    memset(beacon_temp->essid, 0, sizeof(beacon_temp->essid)); // clear essid
+    memcpy(beacon_temp->bssid, bssid_addr, 6); // copy bssid, because bssid will be convert integer
+    beacon_temp->power = power;
+    beacon_temp->channel = (uint8_t)((frequency - 2412)/5) + 1;    // Todo: Now setting middle frequency, Add Low and High
+    beacon_temp->hit_beacon = 0;
+    beacon_temp->crypt = crypt; // 0 - Open, 1 - Crypt
+    strncpy(beacon_temp->essid, (char*)(essid_addr), (uint8_t)(*(essid_addr-1))); // essid_addr => length
+}
+void CopyProbeDetail(PROBE_DETAIL* probe_temp, uint8_t* bssid_addr, uint8_t* station_addr, char* probe_addr,
+                     int8_t power)
+{
+    memset(probe_temp->probe, 0, sizeof(probe_temp->probe)); // clear probe
+    memcpy(probe_temp->bssid, bssid_addr, 6);
+    memcpy(probe_temp->station_id, station_addr, 6);
+    probe_temp->power = power;
+    probe_temp->frame = 0; // frame will be counting
+    strncpy(probe_temp->probe, (char*)(probe_addr), (uint8_t)(*(probe_addr-1))); // probe_addr => length
 }
 
 uint64_t MacToIntegerKey(uint8_t* byte_mac)
